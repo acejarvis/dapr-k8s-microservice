@@ -1,0 +1,18 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore
+  namespace: default
+spec:
+  type: state.mysql
+  version: v1
+  metadata:
+  - name: connectionString
+    # value: "root:Cloud@1234@tcp(172.16.0.88:3306)/?allowNativePasswords=true"
+    secretKeyRef:
+      name: mysql-connect
+      key: connection_string
+  - name: schemaName
+    value: "dapr_schema"
+  - name: tableName
+    value: "dapr_state"

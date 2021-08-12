@@ -1,0 +1,45 @@
+kind: Service
+apiVersion: v1
+metadata:
+  name: node-demo1
+  labels:
+    app: node
+spec:
+  selector:
+    app: node
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 3000
+  type: LoadBalancer
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-demo
+  labels:
+    app: node
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: node
+  template:
+    metadata:
+      labels:
+        app: node
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "node-demo1"
+        dapr.io/app-port: "3000"
+        dapr.io/sidecar-liveness-probe-delay-second: "20"
+    spec:
+      containers:
+        - name: node
+          image: acejarvis/node-demo:latest
+          ports:
+            - containerPort: 3000
+          imagePullPolicy: Always
+      imagePullSecrets:
+        - name: regcred
