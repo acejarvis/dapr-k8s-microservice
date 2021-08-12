@@ -1,7 +1,7 @@
 kind: Service
 apiVersion: v1
 metadata:
-  name: node-demo1
+  name: node-demo
   labels:
     app: node
 spec:
@@ -31,13 +31,13 @@ spec:
         app: node
       annotations:
         dapr.io/enabled: "true"
-        dapr.io/app-id: "node-demo1"
+        dapr.io/app-id: "node-demo"
         dapr.io/app-port: "3000"
         dapr.io/sidecar-liveness-probe-delay-second: "20"
     spec:
       containers:
         - name: node
-          image: acejarvis/node-demo:latest
+          image: swr.cn-north-4.myhuaweicloud.com/hwstaff_f00341949/node-demo:latest
           ports:
             - containerPort: 3000
           imagePullPolicy: Always

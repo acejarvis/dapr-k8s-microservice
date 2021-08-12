@@ -8,7 +8,7 @@ spec:
   version: v1
   metadata:
     - name: url # Required, define DB connection in DSN format
-      value: "root:Cloud@1234@tcp(172.16.0.88:3306)/dapr_schema?allowNativePasswords=true"
+      value: "root:Cloud@1234@tcp(172.16.0.88:3306)/dapr_schema"
     - name: maxIdleConns
       value: "10"
     - name: maxOpenConns

@@ -5,6 +5,8 @@ const port = 3000;
 app.use(bodyParser.json());
 require('isomorphic-fetch');
 
+const request = require("request");
+
 // These ports are injected automatically into the container.
 const daprPort = process.env.DAPR_HTTP_PORT;
 const daprGRPCPort = process.env.DAPR_GRPC_PORT;
@@ -109,28 +111,19 @@ app.post('/sqlorder', (req, res) => {
             sql: "INSERT INTO dapr_bind (value) VALUES (" + body + ")"
         }
     }
-    fetch(bindingsUrl, {
-        method: "POST",
-        body: JSON.stringify(exec),
-        headers: {
-            "Content-Type": "application/json"
-        }
-    }).then((response) => {
-        if (!response.ok) {
-            throw "Failed to insert data." + response.json();
-        }
-        console.log("Successfully inserted data.");
-        res.status(200).send(response.data);
-        fetch(bindingsUrl, {
-            method: "POST",
-            body: "{\"operation\":\"close\"}",
-            headers: {
-                "Content-Type": "application/json"
-            }
-        });
-    }).catch((error) => {
-        console.log(error);
-        res.status(500).send({ message: error });
+    const options = {
+        'method': 'POST',
+        'url': bindingsUrl,
+        'headers': {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(exec)
+    };
+
+    request(options, function (error, response) {
+        if (error) throw new Error(error);
+        console.log(response.body);
+        res.json(response.body);
     });
 });
 
@@ -138,6 +131,23 @@ app.get('/ports', (_req, res) => {
     console.log("DAPR_HTTP_PORT: " + daprPort);
     console.log("DAPR_GRPC_PORT: " + daprGRPCPort);
     res.status(200).send({ DAPR_HTTP_PORT: daprPort, DAPR_GRPC_PORT: daprGRPCPort })
+});
+
+app.post('/forward', (req, res) => {
+    const options = {
+        'method': 'POST',
+        'url': req.body.url,
+        'headers': {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(req.body.body)
+    };
+
+    request(options, function (error, response) {
+        if (error) throw new Error(error);
+        console.log(response.body);
+        res.json(response.body);
+    });
 });
 
 app.listen(port, () => {
