@@ -3,43 +3,19 @@ const app = express();
 const bodyParser = require('body-parser');
 const port = 3000;
 app.use(bodyParser.json());
-require('isomorphic-fetch');
-
 const request = require("request");
 
 // These ports are injected automatically into the container.
 const daprPort = process.env.DAPR_HTTP_PORT;
 const daprGRPCPort = process.env.DAPR_GRPC_PORT;
 
-// stateStore
-const stateStoreName = `statestore`;
-const stateUrl = `http://localhost:${daprPort}/v1.0/state/${stateStoreName}`;
-
 // mysql-binding
-const bindingsName = `rds-mysql`
+const bindingsName = `rds-mysql`;
 const bindingsUrl = `http://localhost:${daprPort}/v1.0/bindings/${bindingsName}`;
 
 
 app.get('/', (_req, res) => {
     res.send('Hello Dapr on K8s!');
-});
-
-app.get('/state/:id', (req, res) => {
-    id = req.params.id;
-    fetch(`${stateUrl}/${id}`)
-        .then((response) => {
-            if (!response.ok) {
-                throw "Could not get state." + response.json();
-            }
-
-            return response.text();
-        }).then((orders) => {
-            res.send(orders);
-        }).catch((error) => {
-            console.log(error);
-            res.status(500).send({ message: error });
-        });
-    res.send(id);
 });
 
 app.get('/order/:id', (req, res) => {
@@ -48,69 +24,38 @@ app.get('/order/:id', (req, res) => {
     const query = {
         operation: "query",
         metadata: {
-            sql: "SELECT * FROM dapr_bind WHERE id == " + id
+            sql: "SELECT * FROM dapr_bind WHERE id = " + id
         }
     };
-    console.log(query.metadata.sql);
-    fetch(bindingsUrl, {
-        method: "POST",
-        body: JSON.stringify(query),
-        headers: {
-            "Content-Type": "application/json"
-        }
-    }).then((response) => {
-        if (!response.ok) {
-            throw "Failed to query data." + response.json();
-        }
 
-        console.log("Successfully queried data.");
-        res.status(200).send(response.data);
-    }).catch((error) => {
-        console.log(error);
-        res.status(500).send({ message: error });
+    const options = {
+        'method': 'POST',
+        'url': bindingsUrl,
+        'headers': {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(query)
+    };
+    request(options, function (error, response) {
+        if (error) throw new Error(error);
+        console.log(response.body);
+        res.json(response.body);
     });
 });
+
 
 
 
 app.post('/neworder', (req, res) => {
-    const data = req.body.data;
-    const orderId = req.body.orderId;
-    console.log("Got a new order! Order ID: " + orderId);
-
-    const state = [{
-        key: orderId,
-        value: data
-    }];
-
-    fetch(stateUrl, {
-        method: "POST",
-        body: JSON.stringify(state),
-        headers: {
-            "Content-Type": "application/json"
-        }
-    }).then((response) => {
-        if (!response.ok) {
-            throw "Failed to persist state." + response.json();
-        }
-
-        console.log("Successfully persisted state.");
-        res.status(200).send();
-    }).catch((error) => {
-        console.log(error);
-        res.status(500).send({ message: error });
-    });
-});
-
-app.post('/sqlorder', (req, res) => {
-    body = JSON.stringify(req.body);
-    console.log(body);
+    value = req.body.value;
+    console.log(value);
     const exec = {
         operation: "exec",
         metadata: {
-            sql: "INSERT INTO dapr_bind (value) VALUES (" + body + ")"
+            sql: "INSERT INTO dapr_bind (customerId,value) VALUES (" + "10020, '" + value + "')"
         }
-    }
+    };
+
     const options = {
         'method': 'POST',
         'url': bindingsUrl,
@@ -119,7 +64,29 @@ app.post('/sqlorder', (req, res) => {
         },
         body: JSON.stringify(exec)
     };
+    request(options, function (error, response) {
+        if (error) throw new Error(error);
+        console.log(response.body);
+        res.json(response.body);
+    });
+});
 
+app.get('/crosstable', (_req, res) => {
+    const query = {
+        operation: "query",
+        metadata: {
+            sql: "SELECT dapr_bind.id , dapr_customer.customerName, dapr_bind.value  FROM dapr_bind INNER JOIN dapr_customer ON dapr_bind.customerID=dapr_customer.customerID;"
+        }
+    };
+
+    const options = {
+        'method': 'POST',
+        'url': bindingsUrl,
+        'headers': {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(query)
+    };
     request(options, function (error, response) {
         if (error) throw new Error(error);
         console.log(response.body);

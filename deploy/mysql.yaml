@@ -1,18 +1,21 @@
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: statestore
+  name: rds-mysql
   namespace: default
 spec:
-  type: state.mysql
+  type: bindings.mysql
   version: v1
   metadata:
-  - name: connectionString
-    # value: "root:Cloud@1234@tcp(172.16.0.88:3306)/?allowNativePasswords=true"
-    secretKeyRef:
-      name: mysql-connect
-      key: connection_string
-  - name: schemaName
-    value: "dapr_schema"
-  - name: tableName
-    value: "dapr_state"
+    - name: url # Required, define DB connection in DSN format
+      secretKeyRef:
+        name: mysql-connect
+        key: connection_string
+    - name: maxIdleConns
+      value: "10"
+    - name: maxOpenConns
+      value: "10"
+    - name: connMaxLifetime
+      value: "12s"
+    - name: connMaxIdleTime
+      value: "12s"
