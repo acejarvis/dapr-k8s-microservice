@@ -24,22 +24,26 @@ app.get('/order/:id', (req, res) => {
     const query = {
         operation: "query",
         metadata: {
-            sql: "SELECT * FROM dapr_bind WHERE id = " + id
+            sql: "SELECT * FROM dapr_bind WHERE id == " + id
         }
     };
+    console.log(query.metadata.sql);
+    fetch(bindingsUrl, {
+        method: "POST",
+        body: JSON.stringify(query),
+        headers: {
+            "Content-Type": "application/json"
+        }
+    }).then((response) => {
+        if (!response.ok) {
+            throw "Failed to query data." + response.json();
+        }
 
-    const options = {
-        'method': 'POST',
-        'url': bindingsUrl,
-        'headers': {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(query)
-    };
-    request(options, function (error, response) {
-        if (error) throw new Error(error);
-        console.log(response.body);
-        res.json(response.body);
+        console.log("Successfully queried data.");
+        res.status(200).send(response.data);
+    }).catch((error) => {
+        console.log(error);
+        res.status(500).send({ message: error });
     });
 });
 
@@ -47,15 +51,14 @@ app.get('/order/:id', (req, res) => {
 
 
 app.post('/neworder', (req, res) => {
-    value = req.body.value;
-    console.log(value);
+    body = JSON.stringify(req.body);
+    console.log(body);
     const exec = {
         operation: "exec",
         metadata: {
-            sql: "INSERT INTO dapr_bind (customerId,value) VALUES (" + "10020, '" + value + "')"
+            sql: "INSERT INTO dapr_bind (customerId,value) VALUES (" + "10020, " + body + ")"
         }
-    };
-
+    }
     const options = {
         'method': 'POST',
         'url': bindingsUrl,
@@ -64,29 +67,7 @@ app.post('/neworder', (req, res) => {
         },
         body: JSON.stringify(exec)
     };
-    request(options, function (error, response) {
-        if (error) throw new Error(error);
-        console.log(response.body);
-        res.json(response.body);
-    });
-});
 
-app.get('/crosstable', (_req, res) => {
-    const query = {
-        operation: "query",
-        metadata: {
-            sql: "SELECT dapr_bind.id , dapr_customer.customerName, dapr_bind.value  FROM dapr_bind INNER JOIN dapr_customer ON dapr_bind.customerID=dapr_customer.customerID;"
-        }
-    };
-
-    const options = {
-        'method': 'POST',
-        'url': bindingsUrl,
-        'headers': {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(query)
-    };
     request(options, function (error, response) {
         if (error) throw new Error(error);
         console.log(response.body);
