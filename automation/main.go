@@ -31,14 +31,17 @@ func main() {
 }
 
 type Server struct {
-	wg    *sync.WaitGroup
-	muxer *mux.Router
+	wg         *sync.WaitGroup
+	muxer      *mux.Router
+	kubeClient *KubeClient
 }
 
 // create a server struct, input is wait group
 func NewServer(wg *sync.WaitGroup) (*Server, error) {
+	KubeClient := NewKubeClient()
 	s := &Server{
-		wg: wg,
+		wg:         wg,
+		kubeClient: KubeClient,
 	}
 
 	// add one job to wait group
@@ -55,6 +58,9 @@ func (s *Server) WithMuxer() *Server {
 	// create a muxer, all other rest api are under this muxer
 	subRouter := s.muxer.PathPrefix("/api").Subrouter()
 	subRouter.HandleFunc("/", s.HandleHelloWorld).Methods("GET")
+	subRouter.HandleFunc("/kubectl/create", s.HandleCreate).Methods("GET")
+	subRouter.HandleFunc("/kubectl/delete", s.HandleDelete).Methods("GET")
+
 	subRouter.Use(s.Auth)
 
 	return s
@@ -90,4 +96,18 @@ func (s *Server) HandleHelloWorld(w http.ResponseWriter, r *http.Request) {
 	log.Println("HandleHelloWorld")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Hello Dapr K8s!"))
+}
+
+func (s *Server) HandleCreate(w http.ResponseWriter, r *http.Request) {
+	log.Println("HandleCreate")
+	result := s.kubeClient.CreateAppDeploy()
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(result))
+}
+
+func (s *Server) HandleDelete(w http.ResponseWriter, r *http.Request) {
+	log.Println("HandleDelete")
+	result := s.kubeClient.DeleteAppDeploy()
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(result))
 }

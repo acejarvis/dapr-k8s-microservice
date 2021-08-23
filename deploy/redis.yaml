@@ -6,9 +6,9 @@ spec:
   type: state.redis
   version: v1
   metadata:
-  - name: redisHost
-    value: 172.16.0.87:6379
-  - name: redisPassword
-    secretKeyRef:
-      name: redis-pass
-      key: passowrd
+    - name: redisHost
+      value: 172.16.0.87:6379
+    - name: redisPassword
+      secretKeyRef:
+        name: redis-pass
+        key: password
