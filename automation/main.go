@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -59,7 +60,8 @@ func (s *Server) WithMuxer() *Server {
 	subRouter := s.muxer.PathPrefix("/api").Subrouter()
 	subRouter.HandleFunc("/", s.HandleHelloWorld).Methods("GET")
 	subRouter.HandleFunc("/kubectl/create", s.HandleCreate).Methods("GET")
-	subRouter.HandleFunc("/kubectl/delete", s.HandleDelete).Methods("GET")
+	subRouter.HandleFunc("/kubectl/delete", s.HandleDelete).Methods("POST")
+	subRouter.HandleFunc("/kubectl/disconnect", s.HandleDisconnect).Methods("GET")
 
 	subRouter.Use(s.Auth)
 
@@ -105,9 +107,38 @@ func (s *Server) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(result))
 }
 
+type DeleteRequest struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+}
+
 func (s *Server) HandleDelete(w http.ResponseWriter, r *http.Request) {
 	log.Println("HandleDelete")
-	result := s.kubeClient.DeleteAppDeploy()
+	var req DeleteRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Println(err)
+		w.Write([]byte(err.Error()))
+	}
+	fmt.Println(req)
+
+	result := s.kubeClient.DeleteAppDeploy(req.Namespace, req.Name)
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(result))
+}
+
+func (s *Server) HandleDisconnect(w http.ResponseWriter, r *http.Request) {
+	log.Println("HandleDisconnect")
+	var req DeleteRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Println(err)
+		w.Write([]byte(err.Error()))
+	}
+	fmt.Println(req)
+	result := s.kubeClient.DisconnectDCS(req.Namespace, req.Name)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(result))
 }
