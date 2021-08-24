@@ -2,169 +2,254 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
-	"fmt"
 	"path/filepath"
+	"regexp"
+	"strings"
+	"time"
 
-	appsv1 "k8s.io/api/apps/v1"
-	apiv1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/cli-runtime/pkg/resource"
+	"k8s.io/client-go/discovery/cached/disk"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
+	"k8s.io/kubectl/pkg/util"
 )
 
 type KubeClient struct {
-	Clientset *kubernetes.Clientset
+	c      dynamic.Interface
+	config *rest.Config
+	mapper *restmapper.DeferredDiscoveryRESTMapper
 }
 
-func NewKubeClient() *KubeClient {
+type Metadata struct {
+	Name      string
+	Namespace string
+	Group     string
+	Version   string
+	Resource  string
+	Kind      string
+}
+
+func NewKubeClient() (KubeClient, error) {
 	var kubeconfig *string
-	if home := homedir.HomeDir(); home != "" {
+	home := homedir.HomeDir()
+	if home != "" {
 		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
 	} else {
 		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
 	}
+
 	flag.Parse()
 
+	// use the current context in kubeconfig
 	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
 	if err != nil {
-		panic(err)
+		return KubeClient{}, err
 	}
-	clientset, err := kubernetes.NewForConfig(config)
+
+	// create the dynamic client
+	config.Timeout = 180 * time.Second
+	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
-		panic(err)
+		return KubeClient{}, err
 	}
-	return &KubeClient{
-		Clientset: clientset,
-	}
-}
+	// mapper
+	cacheDir := filepath.Join(home, ".kube", "cache")
+	httpCacheDir := filepath.Join(cacheDir, "http")
+	discoveryCacheDir := computeDiscoverCacheDir(filepath.Join(cacheDir, "discovery"), config.Host)
 
-func (k *KubeClient) CreateAppDeploy() string {
-	deploymentsClient := k.Clientset.AppsV1().Deployments(apiv1.NamespaceDefault)
-
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "demo-deployment",
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: int32Ptr(2),
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": "demo",
-				},
-			},
-			Template: apiv1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"app": "demo",
-					},
-				},
-				Spec: apiv1.PodSpec{
-					Containers: []apiv1.Container{
-						{
-							Name:  "web",
-							Image: "nginx:1.12",
-							Ports: []apiv1.ContainerPort{
-								{
-									Name:          "http",
-									Protocol:      apiv1.ProtocolTCP,
-									ContainerPort: 80,
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	// Create Deployment
-	fmt.Println("Creating deployment...")
-	result, err := deploymentsClient.Create(context.TODO(), deployment, metav1.CreateOptions{})
+	// DiscoveryClient queries API server about the resources
+	cdc, err := disk.NewCachedDiscoveryClientForConfig(config, discoveryCacheDir, httpCacheDir, 10*time.Minute)
 	if err != nil {
-		panic(err)
+		return KubeClient{}, err
 	}
-	fmt.Printf("Created deployment %q.\n", result.GetObjectMeta().GetName())
-	return fmt.Sprintf("Created deployment %q.\n", result.GetObjectMeta().GetName())
+
+	mapper := restmapper.NewDeferredDiscoveryRESTMapper(cdc)
+
+	KubeClient := KubeClient{
+		c:      dynamicClient,
+		config: config,
+		mapper: mapper,
+	}
+
+	return KubeClient, err
 }
 
-func (k *KubeClient) DeleteAppDeploy(namespace string, appName string) string {
-	if namespace == "" {
-		namespace = "default"
-	}
-	deploymentsClient := k.Clientset.AppsV1().Deployments(namespace)
-	fmt.Println("Deleting deployment...")
-	deletePolicy := metav1.DeletePropagationForeground
-	if err := deploymentsClient.Delete(context.TODO(), appName, metav1.DeleteOptions{
-		PropagationPolicy: &deletePolicy,
-	}); err != nil {
-		return fmt.Sprintf("error: %v", err)
-	}
-	fmt.Println("Deleted deployment.")
-	return fmt.Sprintf("Deleted deployment.")
-}
+func (k *KubeClient) ApplyWithNamespaceOverride(u *unstructured.Unstructured, namespaceOverride string) (Metadata, error) {
+	metadata := Metadata{}
+	gvk := u.GroupVersionKind()
 
-func (k *KubeClient) ConnectRedis() string {
-	deploymentsClient := k.Clientset.AppsV1().Deployments(apiv1.NamespaceDefault)
-	fmt.Println("Connecting Redis...")
-
-	deployment := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "demo-deployment",
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: int32Ptr(2),
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": "demo",
-				},
-			},
-			Template: apiv1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"app": "demo",
-					},
-				},
-				Spec: apiv1.PodSpec{
-					Containers: []apiv1.Container{
-						{
-							Name:  "web",
-							Image: "nginx:1.12",
-							Ports: []apiv1.ContainerPort{
-								{
-									Name:          "http",
-									Protocol:      apiv1.ProtocolTCP,
-									ContainerPort: 80,
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	result, err := deploymentsClient.Create(context.TODO(), deployment, metav1.CreateOptions{})
+	restMapping, err := k.mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 	if err != nil {
-		panic(err)
+		return metadata, err
 	}
-	fmt.Printf("Created deployment %q.\n", result.GetObjectMeta().GetName())
-	return fmt.Sprintf("Created deployment %q.\n", result.GetObjectMeta().GetName())
+
+	gvr := restMapping.Resource
+	gv := gvk.GroupVersion()
+	k.config.GroupVersion = &gv
+
+	restClient, err := NewRestClient(*k.config, gv)
+	if err != nil {
+		return metadata, err
+	}
+
+	helper := resource.NewHelper(restClient, restMapping)
+	if namespaceOverride == "" {
+		namespace := u.GetNamespace()
+		if helper.NamespaceScoped && namespace == "" {
+			namespace = "default"
+			u.SetNamespace(namespace)
+		}
+	} else {
+		if helper.NamespaceScoped {
+			u.SetNamespace(namespaceOverride)
+		}
+	}
+
+	info := &resource.Info{
+		Client:          restClient,
+		Mapping:         restMapping,
+		Namespace:       u.GetNamespace(),
+		Name:            u.GetName(),
+		Source:          "",
+		Object:          u,
+		ResourceVersion: restMapping.Resource.Version,
+	}
+
+	patcher, err := NewPatcher(info, helper)
+	if err != nil {
+		return metadata, err
+	}
+
+	// Get the modified configuration of the object. Embed the result
+	// as an annotation in the modified configuration, so that it will appear
+	// in the patch sent to the server.
+	modified, err := util.GetModifiedConfiguration(info.Object, true, unstructured.UnstructuredJSONScheme)
+	if err != nil {
+		return metadata, err
+	}
+
+	if err := info.Get(); err != nil {
+		if !errors.IsNotFound(err) {
+			return metadata, err
+		}
+
+		// Create the resource if it doesn't exist
+		// First, update the annotation used by kubectl apply
+		if err := util.CreateApplyAnnotation(info.Object, unstructured.UnstructuredJSONScheme); err != nil {
+			return metadata, err
+		}
+
+		// Then create the resource and skip the three-way merge
+		obj, err := helper.Create(info.Namespace, true, info.Object)
+		if err != nil {
+			return metadata, err
+		}
+		info.Refresh(obj, true)
+	}
+
+	_, patchedObject, err := patcher.Patch(info.Object, modified, info.Namespace, info.Name)
+	if err != nil {
+		return metadata, err
+	}
+
+	info.Refresh(patchedObject, true)
+
+	metadata.Name = u.GetName()
+	metadata.Namespace = u.GetNamespace()
+	metadata.Group = gvr.Group
+	metadata.Resource = gvr.Resource
+	metadata.Version = gvr.Version
+	metadata.Kind = gvk.Kind
+
+	return metadata, nil
 }
 
-func (k *KubeClient) DisconnectDCS(namespace string, appName string) string {
-	deploymentsClient := k.Clientset.CoreV1().ComponentStatuses()
-	fmt.Println("Deleting DCS...")
-	// deletePolicy := metav1.DeletePropagationForeground
-	if err := deploymentsClient.Delete(context.TODO(), "statestore", metav1.DeleteOptions{
-		// PropagationPolicy: &deletePolicy,
-	}); err != nil {
-		fmt.Println("error: ", err)
-		return fmt.Sprintf("error: %v", err)
+func (k *KubeClient) DeleteResourceByKindAndNameAndNamespace(kind, name, namespace string, do metav1.DeleteOptions) error {
+	gvk, err := k.mapper.KindFor(schema.GroupVersionResource{Resource: kind})
+	if err != nil {
+		return err
 	}
-	fmt.Println("Deleted DCS.")
-	return fmt.Sprintf("Deleted DCS.")
+
+	restMapping, err := k.mapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+	if err != nil {
+		return err
+	}
+
+	restClient, err := NewRestClient(*k.config, gvk.GroupVersion())
+	if err != nil {
+		return err
+	}
+
+	helper := resource.NewHelper(restClient, restMapping)
+	if helper.NamespaceScoped {
+		err = k.c.
+			Resource(restMapping.Resource).
+			Namespace(namespace).
+			Delete(context.TODO(), name, do)
+	} else {
+		err = k.c.
+			Resource(restMapping.Resource).
+			Delete(context.TODO(), name, do)
+	}
+
+	return err
 }
 
-func int32Ptr(i int32) *int32 { return &i }
+func NewRestClient(restConfig rest.Config, gv schema.GroupVersion) (rest.Interface, error) {
+	restConfig.ContentConfig = resource.UnstructuredPlusDefaultContentConfig()
+	restConfig.GroupVersion = &gv
+	if len(gv.Group) == 0 {
+		restConfig.APIPath = "/api"
+	} else {
+		restConfig.APIPath = "/apis"
+	}
+
+	return rest.RESTClientFor(&restConfig)
+}
+
+var overlyCautiousIllegalFileCharacters = regexp.MustCompile(`[^(\w/\.)]`)
+
+// computeDiscoverCacheDir takes the parentDir and the host and comes up with a "usually non-colliding" name.
+func computeDiscoverCacheDir(parentDir, host string) string {
+	// strip the optional scheme from host if its there:
+	schemelessHost := strings.Replace(strings.Replace(host, "https://", "", 1), "http://", "", 1)
+	// now do a simple collapse of non-AZ09 characters.  Collisions are possible but unlikely.
+	// Even if we do collide the problem is short lived
+	safeHost := overlyCautiousIllegalFileCharacters.ReplaceAllString(schemelessHost, "_")
+	return filepath.Join(parentDir, safeHost)
+}
+
+func ToUnstructured(manifest map[string]interface{}) (*unstructured.Unstructured, error) {
+	b, err := json.Marshal(manifest)
+	if err != nil {
+		return nil, err
+	}
+
+	return JSONToUnstructured(b)
+}
+
+func JSONToUnstructured(jsonString []byte) (*unstructured.Unstructured, error) {
+	obj, _, err := unstructured.UnstructuredJSONScheme.Decode(jsonString, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	// Convert the runtime.Object to unstructured.Unstructured.
+	m, err := runtime.DefaultUnstructuredConverter.ToUnstructured(obj)
+	if err != nil {
+		return nil, err
+	}
+
+	return &unstructured.Unstructured{
+		Object: m,
+	}, nil
+}
