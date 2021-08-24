@@ -1,44 +1,52 @@
 {
-    "apiVersion": "apps/v1",
-    "kind": "Deployment",
-    "metadata": {
-        "name": "nodeapp",
-        "labels": {
-            "app": "node"
-        }
-    },
-    "spec": {
-        "replicas": 1,
-        "selector": {
-            "matchLabels": {
+    "deployment": {
+        "apiVersion": "apps/v1",
+        "kind": "Deployment",
+        "metadata": {
+            "name": "nodeapp",
+            "labels": {
                 "app": "node"
             }
         },
-        "template": {
-            "metadata": {
-                "labels": {
+        "spec": {
+            "replicas": 1,
+            "selector": {
+                "matchLabels": {
                     "app": "node"
-                },
-                "annotations": {
-                    "dapr.io/enabled": "true",
-                    "dapr.io/app-id": "nodeapp",
-                    "dapr.io/app-port": "3000"
                 }
             },
-            "spec": {
-                "containers": [
-                    {
-                        "name": "node",
-                        "image": "dapriosamples/hello-k8s-node:latest",
-                        "ports": [
-                            {
-                                "containerPort": 3000
-                            }
-                        ],
-                        "imagePullPolicy": "Always"
+            "template": {
+                "metadata": {
+                    "labels": {
+                        "app": "node"
+                    },
+                    "annotations": {
+                        "dapr.io/enabled": "true",
+                        "dapr.io/app-id": "nodeapp",
+                        "dapr.io/app-port": "3000"
                     }
-                ]
+                },
+                "spec": {
+                    "containers": [
+                        {
+                            "name": "node",
+                            "image": "dapriosamples/hello-k8s-node:latest",
+                            "ports": [
+                                {
+                                    "containerPort": 3000
+                                }
+                            ],
+                            "imagePullPolicy": "Always"
+                        }
+                    ]
+                }
             }
         }
+    },
+    "connect": {
+        "dcsName": "dcs-73w4",
+        "credential": "Q2xvdWRAMTIz",
+        "ak": "MUpaTk5ZV0tNRktaM1IwSEhFSE0=",
+        "sk": "WmpHZENSMlk0U1lDTXNkazd6b1ZrcGY0SlFYMFYxd0JMb0R6emY5WA=="
     }
 }

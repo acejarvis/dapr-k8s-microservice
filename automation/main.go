@@ -13,9 +13,6 @@ import (
 func main() {
 	var wg sync.WaitGroup
 
-	// init log, currently, hard code log level to info, and output format to console
-	log.Println("info", "console")
-
 	s, err := NewServer(&wg)
 	if err != nil {
 		log.Fatal(err)
@@ -61,6 +58,7 @@ func (s *Server) WithMuxer() *Server {
 	subRouter.HandleFunc("/", s.HandleHelloWorld).Methods("GET")
 	subRouter.HandleFunc("/kubectl/create", s.HandleCreate).Methods("POST")
 	subRouter.HandleFunc("/kubectl/delete", s.HandleDelete).Methods("POST")
+	subRouter.HandleFunc("/kubectl/connect", s.HandleConnect).Methods("POST")
 	subRouter.HandleFunc("/kubectl/disconnect", s.HandleDisconnect).Methods("GET")
 
 	subRouter.Use(s.Auth)
@@ -69,7 +67,7 @@ func (s *Server) WithMuxer() *Server {
 }
 
 func (s *Server) Start() {
-	log.Println("Dapr Automation Server start...", nil)
+	log.Println("Dapr Automation Server started")
 
 	c := cors.New(cors.Options{
 		AllowedOrigins: []string{"*"},

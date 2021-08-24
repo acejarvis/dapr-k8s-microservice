@@ -1,12 +1,25 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (k *KubeClient) ConnectRedis(redisHost string, redisPassword string) (string, error) {
+func (k *KubeClient) ConnectRedis(req *DCSConnectRequest) (string, error) {
+
+	// find DCS
+	redisHost, noPasswordAccess, password, err := findDCS(req)
+	if err != nil {
+		return "", err
+	}
+	redisPassword := ""
+	if noPasswordAccess == "false" {
+		redisPassword = password
+	}
+
+	// connect to DCS
 	stateRedisConfig := []map[string]interface{}{}
 	stateRedisConfig = append(stateRedisConfig, map[string]interface{}{
 		"name":  "redisHost",
@@ -31,49 +44,49 @@ func (k *KubeClient) ConnectRedis(redisHost string, redisPassword string) (strin
 
 	yaml, err := ToUnstructured(redis)
 	if err != nil {
-		return "ERROR", err
+		return "", err
 	}
 
 	meta, err := k.ApplyWithNamespaceOverride(yaml, "default")
 	if err != nil {
-		return "ERROR", err
+		return "", err
 	}
-	fmt.Println(meta)
-	return fmt.Sprintln(meta), nil
+	b, _ := json.Marshal(meta)
+
+	return string(b), nil
 }
 
-func (k *KubeClient) DisconnectRedis(namespace string, name string) (string, error) {
+func (k *KubeClient) DisconnectRedis() (string, error) {
 	err := k.DeleteResourceByKindAndNameAndNamespace("Component", "statestore", "default", metav1.DeleteOptions{})
 	if err != nil {
-		return "ERROR Disconnecting Redis", err
+		return "", err
 	}
-	return "Disconnected Redis", nil
+	return "Dapr StateStore Disconnected.", nil
 }
 
-func (k *KubeClient) CreateAppDeploy(deployment map[string]interface{}) (string, error) {
+func (k *KubeClient) CreateAppDeploy(deployment map[string]interface{}, connect *DCSConnectRequest) (string, error) {
 
-	redisHost := "172.16.0.197:6379"
-	redisPassword := "Cloud@123"
-
-	meta, err := k.ConnectRedis(redisHost, redisPassword)
-	fmt.Println(meta)
-
-	// deployment, _ := readJSON()
+	// connect to DCS
+	redisResult, err := k.ConnectRedis(connect)
+	if err != nil {
+		return "", err
+	}
+	// parse Deployment template
 	deploymentYAML, err := ToUnstructured(deployment)
 	if err != nil {
-		return "ERROR", err
+		return "", err
 	}
 	metadata := deploymentYAML.Object["metadata"].(map[string]interface{})
 	app := metadata["labels"].(map[string]interface{})["app"]
 	containerPort := deploymentYAML.Object["spec"].(map[string]interface{})["template"].(map[string]interface{})["spec"].(map[string]interface{})["containers"].([]interface{})[0].(map[string]interface{})["ports"].([]interface{})[0].(map[string]interface{})["containerPort"]
 
+	// construct Service template
 	portsConfig := []map[string]interface{}{}
 	portsConfig = append(portsConfig, map[string]interface{}{
 		"protocol":   "TCP",
 		"port":       80,
 		"targetPort": containerPort,
 	})
-
 	service := map[string]interface{}{
 		"apiVersion": "v1",
 		"kind":       "Service",
@@ -89,37 +102,39 @@ func (k *KubeClient) CreateAppDeploy(deployment map[string]interface{}) (string,
 
 	serviceYAML, err := ToUnstructured(service)
 	if err != nil {
-		return "ERROR", err
+		return "", err
 	}
 
-	result, err := k.ApplyWithNamespaceOverride(serviceYAML, "default")
+	// apply Service
+	serviceResult, err := k.ApplyWithNamespaceOverride(serviceYAML, "default")
 	if err != nil {
-		return "ERROR", err
+		return "", err
 	}
-	fmt.Println(result)
-	result1, err := k.ApplyWithNamespaceOverride(deploymentYAML, "default")
+	serviceJson, _ := json.Marshal(serviceResult)
+	// apply Deployment
+	deploymentResult, err := k.ApplyWithNamespaceOverride(deploymentYAML, "default")
 	if err != nil {
-		return "ERROR", err
+		return "", err
 	}
-	fmt.Println(result1)
+	deploymentJson, _ := json.Marshal(deploymentResult)
 
-	return fmt.Sprintln(result, result1), nil
+	return "App Created \n" + redisResult + "\n" + string(serviceJson) + "\n" + string(deploymentJson), nil
 }
 
 func (k *KubeClient) DeleteAppDeploy(namespace string, name string) (string, error) {
 	err := k.DeleteResourceByKindAndNameAndNamespace("Service", name, namespace, metav1.DeleteOptions{})
 	if err != nil {
-		return "ERROR", err
+		return "", err
 	}
 
 	err = k.DeleteResourceByKindAndNameAndNamespace("Deployment", name, namespace, metav1.DeleteOptions{})
 	if err != nil {
-		return "ERROR", err
+		return "", err
 	}
 
-	result, err := k.DisconnectRedis("default", "statestore")
+	result, err := k.DisconnectRedis()
 	if err != nil {
-		return "ERROR", err
+		return "", err
 	}
 	str := result + "App has been deleted."
 	return fmt.Sprintln(str), nil

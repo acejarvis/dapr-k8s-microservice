@@ -4,6 +4,7 @@ go 1.16
 
 require (
 	github.com/gorilla/mux v1.8.0
+	github.com/huaweicloud/huaweicloud-sdk-go-v3 v0.0.56
 	github.com/jonboulle/clockwork v0.2.2
 	github.com/rs/cors v1.8.0
 	k8s.io/apimachinery v0.22.1

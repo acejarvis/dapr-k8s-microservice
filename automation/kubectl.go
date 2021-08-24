@@ -31,12 +31,11 @@ type KubeClient struct {
 }
 
 type Metadata struct {
-	Name      string
-	Namespace string
-	Group     string
-	Version   string
-	Resource  string
-	Kind      string
+	Name       string `json:"name"`
+	Namespace  string `json:"namespace"`
+	ApiVersion string `json:"apiVersion"`
+	Resource   string `json:"resource"`
+	Kind       string `json:"kind"`
 }
 
 func NewKubeClient() (KubeClient, error) {
@@ -166,9 +165,8 @@ func (k *KubeClient) ApplyWithNamespaceOverride(u *unstructured.Unstructured, na
 
 	metadata.Name = u.GetName()
 	metadata.Namespace = u.GetNamespace()
-	metadata.Group = gvr.Group
+	metadata.ApiVersion = gvr.Group + "/" + gvr.Version
 	metadata.Resource = gvr.Resource
-	metadata.Version = gvr.Version
 	metadata.Kind = gvk.Kind
 
 	return metadata, nil
