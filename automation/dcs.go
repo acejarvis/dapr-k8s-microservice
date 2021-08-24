@@ -10,7 +10,9 @@ import (
 	region "github.com/huaweicloud/huaweicloud-sdk-go-v3/services/dcs/v2/region"
 )
 
-func findDCS(req *DCSConnectRequest) (string, string, string, error) {
+// find DCS instance under user's account by name
+// return DCS host, isNoPasswordAccess, decoded password and error
+func FindDCS(req *DCSConnectRequest) (string, string, string, error) {
 	realAK, err := base64.StdEncoding.DecodeString(req.AK)
 	if err != nil {
 		return "", "", "", err

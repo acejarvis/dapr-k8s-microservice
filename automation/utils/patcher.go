@@ -1,9 +1,9 @@
 /*
 Reused code from
-https://github.com/kubernetes/kubectl/blob/4ceef69fbc451d9bde6f4d5f92d55624b748141d/pkg/cmd/apply/patcher.go
+https://github.com/kubernetes/kubectl/blob/master/pkg/cmd/apply/patcher.go
 */
 
-package main
+package utils
 
 import (
 	"encoding/json"

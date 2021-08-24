@@ -7,10 +7,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (k *KubeClient) ConnectRedis(req *DCSConnectRequest) (string, error) {
+func (k *KubeClient) ConnectDCS(req *DCSConnectRequest) (string, error) {
 
 	// find DCS
-	redisHost, noPasswordAccess, password, err := findDCS(req)
+	redisHost, noPasswordAccess, password, err := FindDCS(req)
 	if err != nil {
 		return "", err
 	}
@@ -56,7 +56,7 @@ func (k *KubeClient) ConnectRedis(req *DCSConnectRequest) (string, error) {
 	return string(b), nil
 }
 
-func (k *KubeClient) DisconnectRedis() (string, error) {
+func (k *KubeClient) DisconnectDCS() (string, error) {
 	err := k.DeleteResourceByKindAndNameAndNamespace("Component", "statestore", "default", metav1.DeleteOptions{})
 	if err != nil {
 		return "", err
@@ -67,7 +67,7 @@ func (k *KubeClient) DisconnectRedis() (string, error) {
 func (k *KubeClient) CreateAppDeploy(deployment map[string]interface{}, connect *DCSConnectRequest) (string, error) {
 
 	// connect to DCS
-	redisResult, err := k.ConnectRedis(connect)
+	redisResult, err := k.ConnectDCS(connect)
 	if err != nil {
 		return "", err
 	}
@@ -122,17 +122,20 @@ func (k *KubeClient) CreateAppDeploy(deployment map[string]interface{}, connect 
 }
 
 func (k *KubeClient) DeleteAppDeploy(namespace string, name string) (string, error) {
+	// delete Service
 	err := k.DeleteResourceByKindAndNameAndNamespace("Service", name, namespace, metav1.DeleteOptions{})
 	if err != nil {
 		return "", err
 	}
 
+	// delete Deployment
 	err = k.DeleteResourceByKindAndNameAndNamespace("Deployment", name, namespace, metav1.DeleteOptions{})
 	if err != nil {
 		return "", err
 	}
 
-	result, err := k.DisconnectRedis()
+	// diconnect DCS
+	result, err := k.DisconnectDCS()
 	if err != nil {
 		return "", err
 	}

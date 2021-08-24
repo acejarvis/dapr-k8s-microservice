@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	utils "github.com/huaweicloud/dapr-automation/utils"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -39,6 +40,7 @@ type Metadata struct {
 }
 
 func NewKubeClient() (KubeClient, error) {
+	// Fetch local kubeconfig, requires kubectl to be used on the environment before
 	var kubeconfig *string
 	home := homedir.HomeDir()
 	if home != "" {
@@ -49,19 +51,19 @@ func NewKubeClient() (KubeClient, error) {
 
 	flag.Parse()
 
-	// use the current context in kubeconfig
+	// Use the current context in kubeconfig
 	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
 	if err != nil {
 		return KubeClient{}, err
 	}
 
-	// create the dynamic client
+	// Create the dynamic client
 	config.Timeout = 180 * time.Second
 	dynamicClient, err := dynamic.NewForConfig(config)
 	if err != nil {
 		return KubeClient{}, err
 	}
-	// mapper
+	// Mapper
 	cacheDir := filepath.Join(home, ".kube", "cache")
 	httpCacheDir := filepath.Join(cacheDir, "http")
 	discoveryCacheDir := computeDiscoverCacheDir(filepath.Join(cacheDir, "discovery"), config.Host)
@@ -84,6 +86,7 @@ func NewKubeClient() (KubeClient, error) {
 }
 
 func (k *KubeClient) ApplyWithNamespaceOverride(u *unstructured.Unstructured, namespaceOverride string) (Metadata, error) {
+	// Map template metadata
 	metadata := Metadata{}
 	gvk := u.GroupVersionKind()
 
@@ -96,12 +99,14 @@ func (k *KubeClient) ApplyWithNamespaceOverride(u *unstructured.Unstructured, na
 	gv := gvk.GroupVersion()
 	k.config.GroupVersion = &gv
 
+	// Create Kubernetes RESTClient
 	restClient, err := NewRestClient(*k.config, gv)
 	if err != nil {
 		return metadata, err
 	}
 
 	helper := resource.NewHelper(restClient, restMapping)
+	// Override namespace
 	if namespaceOverride == "" {
 		namespace := u.GetNamespace()
 		if helper.NamespaceScoped && namespace == "" {
@@ -124,7 +129,7 @@ func (k *KubeClient) ApplyWithNamespaceOverride(u *unstructured.Unstructured, na
 		ResourceVersion: restMapping.Resource.Version,
 	}
 
-	patcher, err := NewPatcher(info, helper)
+	patcher, err := utils.NewPatcher(info, helper)
 	if err != nil {
 		return metadata, err
 	}
@@ -183,11 +188,13 @@ func (k *KubeClient) DeleteResourceByKindAndNameAndNamespace(kind, name, namespa
 		return err
 	}
 
+	// Create Kubernetes RESTClient
 	restClient, err := NewRestClient(*k.config, gvk.GroupVersion())
 	if err != nil {
 		return err
 	}
 
+	// Delete resource
 	helper := resource.NewHelper(restClient, restMapping)
 	if helper.NamespaceScoped {
 		err = k.c.

@@ -56,12 +56,10 @@ func (s *Server) WithMuxer() *Server {
 	// create a muxer, all other rest api are under this muxer
 	subRouter := s.muxer.PathPrefix("/api").Subrouter()
 	subRouter.HandleFunc("/", s.HandleHelloWorld).Methods("GET")
-	subRouter.HandleFunc("/kubectl/create", s.HandleCreate).Methods("POST")
-	subRouter.HandleFunc("/kubectl/delete", s.HandleDelete).Methods("POST")
-	subRouter.HandleFunc("/kubectl/connect", s.HandleConnect).Methods("POST")
-	subRouter.HandleFunc("/kubectl/disconnect", s.HandleDisconnect).Methods("GET")
-
-	subRouter.Use(s.Auth)
+	subRouter.HandleFunc("/app/create", s.HandleAppCreate).Methods("POST")
+	subRouter.HandleFunc("/app/delete", s.HandleAppDelete).Methods("POST")
+	subRouter.HandleFunc("/dcs/connect", s.HandleDCSConnect).Methods("POST")
+	subRouter.HandleFunc("/dcs/disconnect", s.HandleDCSDisconnect).Methods("GET")
 
 	return s
 }
@@ -80,10 +78,4 @@ func (s *Server) Start() {
 		log.Fatal(err)
 	}
 	s.wg.Done()
-}
-
-func (s *Server) Auth(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r)
-	})
 }

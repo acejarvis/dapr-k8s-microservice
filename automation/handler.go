@@ -7,7 +7,7 @@ import (
 )
 
 type CreateRequest struct {
-	Deployment map[string]interface{} `json:"deployment"`
+	Deployment map[string]interface{} `json:"deployment"` // Kubernetes App Deployment template
 	Connect    DCSConnectRequest      `json:"connect"`
 }
 
@@ -17,8 +17,8 @@ type DeleteRequest struct {
 }
 
 type DCSConnectRequest struct {
-	DCSName    string `json:"dcsName"`
-	Credential string `json:"credential"` // DCS connect password if have one
+	DCSName    string `json:"dcsName"`    // Huaweicloud DCS name
+	Credential string `json:"credential"` // base64 encoded DCS connect password, leave empty if your DCS does not have one
 	AK         string `json:"ak"`         // base64 encoded AK
 	SK         string `json:"sk"`         // base64 encoded SK
 }
@@ -33,8 +33,9 @@ func (s *Server) HandleHelloWorld(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("Hello Dapr K8s!"))
 }
 
-func (s *Server) HandleCreate(w http.ResponseWriter, r *http.Request) {
-	log.Println("HandleCreate")
+// Deploy App on Dapr
+func (s *Server) HandleAppCreate(w http.ResponseWriter, r *http.Request) {
+	log.Println("HandleAppCreate")
 	var req CreateRequest
 	json.NewDecoder(r.Body).Decode(&req)
 	log.Println(req)
@@ -47,8 +48,9 @@ func (s *Server) HandleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) HandleDelete(w http.ResponseWriter, r *http.Request) {
-	log.Println("HandleDelete")
+// Delete App on Dapr
+func (s *Server) HandleAppDelete(w http.ResponseWriter, r *http.Request) {
+	log.Println("HandleAppDelete")
 	var req DeleteRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
@@ -65,15 +67,16 @@ func (s *Server) HandleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) HandleConnect(w http.ResponseWriter, r *http.Request) {
-	log.Println("HandleConnect")
+// Connect DCS to Dapr
+func (s *Server) HandleDCSConnect(w http.ResponseWriter, r *http.Request) {
+	log.Println("HandleDCSConnect")
 	var req DCSConnectRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		HandleInternalServerError(w, err)
 	}
 	log.Println(req)
-	result, err := s.kubeClient.ConnectRedis(&req)
+	result, err := s.kubeClient.ConnectDCS(&req)
 	if err != nil {
 		HandleInternalServerError(w, err)
 	} else {
@@ -82,9 +85,10 @@ func (s *Server) HandleConnect(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) HandleDisconnect(w http.ResponseWriter, r *http.Request) {
-	log.Println("HandleDisconnect")
-	result, err := s.kubeClient.DisconnectRedis()
+// Disconnect DCS from Dapr
+func (s *Server) HandleDCSDisconnect(w http.ResponseWriter, r *http.Request) {
+	log.Println("HandleDCSDisconnect")
+	result, err := s.kubeClient.DisconnectDCS()
 	if err != nil {
 		HandleNotFound(w, err)
 	} else {
