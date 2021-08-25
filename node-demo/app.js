@@ -2,8 +2,10 @@ const express = require('express');
 const app = express();
 const bodyParser = require('body-parser');
 const port = 3000;
-app.use(bodyParser.json());
 const request = require("request");
+
+app.use(bodyParser.json());
+
 
 // These ports are injected automatically into the container.
 const daprPort = process.env.DAPR_HTTP_PORT;
@@ -24,41 +26,38 @@ app.get('/order/:id', (req, res) => {
     const query = {
         operation: "query",
         metadata: {
-            sql: "SELECT * FROM dapr_bind WHERE id == " + id
+            sql: "SELECT * FROM dapr_bind WHERE id = " + id
         }
     };
-    console.log(query.metadata.sql);
-    fetch(bindingsUrl, {
-        method: "POST",
-        body: JSON.stringify(query),
-        headers: {
-            "Content-Type": "application/json"
-        }
-    }).then((response) => {
-        if (!response.ok) {
-            throw "Failed to query data." + response.json();
-        }
 
-        console.log("Successfully queried data.");
-        res.status(200).send(response.data);
-    }).catch((error) => {
-        console.log(error);
-        res.status(500).send({ message: error });
+    // Send SQL SELECT query using Dapr Bindings API
+    const options = {
+        'method': 'POST',
+        'url': bindingsUrl,
+        'headers': {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(query)
+    };
+    request(options, function (error, response) {
+        if (error) throw new Error(error);
+        console.log(response.body);
+        res.json(response.body);
     });
 });
 
 
-
-
 app.post('/neworder', (req, res) => {
-    body = JSON.stringify(req.body);
-    console.log(body);
+    value = req.body.value;
+    console.log(value);
     const exec = {
         operation: "exec",
         metadata: {
-            sql: "INSERT INTO dapr_bind (customerId,value) VALUES (" + "10020, " + body + ")"
+            sql: "INSERT INTO dapr_bind (customerId,value) VALUES (" + "10020, '" + value + "')"
         }
-    }
+    };
+
+    // Send SQL INSERT query using Dapr Bindings API
     const options = {
         'method': 'POST',
         'url': bindingsUrl,
@@ -67,7 +66,31 @@ app.post('/neworder', (req, res) => {
         },
         body: JSON.stringify(exec)
     };
+    request(options, function (error, response) {
+        if (error) throw new Error(error);
+        console.log(response.body);
+        res.json(response.body);
+    });
+});
 
+app.get('/crosstable', (_req, res) => {
+
+    const query = {
+        operation: "query",
+        metadata: {
+            sql: "SELECT dapr_bind.id , dapr_customer.customerName, dapr_bind.value  FROM dapr_bind INNER JOIN dapr_customer ON dapr_bind.customerID=dapr_customer.customerID;"
+        }
+    };
+
+    // Send SQL INNERJOIN query using Dapr Bindings API
+    const options = {
+        'method': 'POST',
+        'url': bindingsUrl,
+        'headers': {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(query)
+    };
     request(options, function (error, response) {
         if (error) throw new Error(error);
         console.log(response.body);
@@ -76,12 +99,14 @@ app.post('/neworder', (req, res) => {
 });
 
 app.get('/ports', (_req, res) => {
+    // Get Dapr API port
     console.log("DAPR_HTTP_PORT: " + daprPort);
     console.log("DAPR_GRPC_PORT: " + daprGRPCPort);
     res.status(200).send({ DAPR_HTTP_PORT: daprPort, DAPR_GRPC_PORT: daprGRPCPort })
 });
 
 app.post('/forward', (req, res) => {
+    // Forward Dapr API request
     const options = {
         'method': 'POST',
         'url': req.body.url,
