@@ -59,7 +59,7 @@ func (s *Server) WithMuxer() *Server {
 	subRouter.HandleFunc("/app/create", s.HandleAppCreate).Methods("POST")
 	subRouter.HandleFunc("/app/delete", s.HandleAppDelete).Methods("POST")
 	subRouter.HandleFunc("/dcs/connect", s.HandleDCSConnect).Methods("POST")
-	subRouter.HandleFunc("/dcs/disconnect", s.HandleDCSDisconnect).Methods("GET")
+	subRouter.HandleFunc("/dcs/disconnect", s.HandleDCSDisconnect).Methods("POST")
 
 	return s
 }

@@ -8,7 +8,6 @@ import (
 )
 
 func (k *KubeClient) ConnectDCS(req *DCSConnectRequest) (string, error) {
-
 	// find DCS
 	redisHost, noPasswordAccess, password, err := FindDCS(req)
 	if err != nil {
@@ -33,7 +32,7 @@ func (k *KubeClient) ConnectDCS(req *DCSConnectRequest) (string, error) {
 		"apiVersion": "dapr.io/v1alpha1",
 		"kind":       "Component",
 		"metadata": map[string]interface{}{
-			"name": "statestore",
+			"name": req.Name,
 		},
 		"spec": map[string]interface{}{
 			"type":     "state.redis",
@@ -47,7 +46,7 @@ func (k *KubeClient) ConnectDCS(req *DCSConnectRequest) (string, error) {
 		return "", err
 	}
 
-	meta, err := k.ApplyWithNamespaceOverride(yaml, "default")
+	meta, err := k.ApplyWithNamespaceOverride(yaml, req.Namespace)
 	if err != nil {
 		return "", err
 	}
@@ -56,23 +55,23 @@ func (k *KubeClient) ConnectDCS(req *DCSConnectRequest) (string, error) {
 	return string(b), nil
 }
 
-func (k *KubeClient) DisconnectDCS() (string, error) {
-	err := k.DeleteResourceByKindAndNameAndNamespace("Component", "statestore", "default", metav1.DeleteOptions{})
+func (k *KubeClient) DisconnectDCS(req *DCSDisconnectRequest) (string, error) {
+	err := k.DeleteResourceByKindAndNameAndNamespace("Component", req.Name, req.Namespace, metav1.DeleteOptions{})
 	if err != nil {
 		return "", err
 	}
 	return "Dapr StateStore Disconnected.", nil
 }
 
-func (k *KubeClient) CreateAppDeploy(deployment map[string]interface{}, connect *DCSConnectRequest) (string, error) {
+func (k *KubeClient) CreateAppDeploy(req *AppCreateRequest) (string, error) {
 
 	// connect to DCS
-	redisResult, err := k.ConnectDCS(connect)
+	redisResult, err := k.ConnectDCS(&req.DCSConnect)
 	if err != nil {
 		return "", err
 	}
 	// parse Deployment template
-	deploymentYAML, err := ToUnstructured(deployment)
+	deploymentYAML, err := ToUnstructured(req.Deployment)
 	if err != nil {
 		return "", err
 	}
@@ -121,21 +120,21 @@ func (k *KubeClient) CreateAppDeploy(deployment map[string]interface{}, connect 
 	return "App Created \n" + redisResult + "\n" + string(serviceJson) + "\n" + string(deploymentJson), nil
 }
 
-func (k *KubeClient) DeleteAppDeploy(namespace string, name string) (string, error) {
+func (k *KubeClient) DeleteAppDeploy(req *AppDeleteRequest) (string, error) {
 	// delete Service
-	err := k.DeleteResourceByKindAndNameAndNamespace("Service", name, namespace, metav1.DeleteOptions{})
+	err := k.DeleteResourceByKindAndNameAndNamespace("Service", req.Name, req.Namespace, metav1.DeleteOptions{})
 	if err != nil {
 		return "", err
 	}
 
 	// delete Deployment
-	err = k.DeleteResourceByKindAndNameAndNamespace("Deployment", name, namespace, metav1.DeleteOptions{})
+	err = k.DeleteResourceByKindAndNameAndNamespace("Deployment", req.Name, req.Namespace, metav1.DeleteOptions{})
 	if err != nil {
 		return "", err
 	}
 
 	// diconnect DCS
-	result, err := k.DisconnectDCS()
+	result, err := k.DisconnectDCS(&req.DCSDisconnect)
 	if err != nil {
 		return "", err
 	}

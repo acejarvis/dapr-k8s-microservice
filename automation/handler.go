@@ -6,12 +6,18 @@ import (
 	"net/http"
 )
 
-type CreateRequest struct {
+type AppCreateRequest struct {
 	Deployment map[string]interface{} `json:"deployment"` // Kubernetes App Deployment template
-	Connect    DCSConnectRequest      `json:"connect"`
+	DCSConnect DCSConnectRequest      `json:"dcsConnect"`
 }
 
-type DeleteRequest struct {
+type AppDeleteRequest struct {
+	Namespace     string               `json:"namespace"`
+	Name          string               `json:"name"`
+	DCSDisconnect DCSDisconnectRequest `json:"dcsDisconnect"`
+}
+
+type DCSDisconnectRequest struct {
 	Namespace string `json:"namespace"`
 	Name      string `json:"name"`
 }
@@ -21,6 +27,8 @@ type DCSConnectRequest struct {
 	Credential string `json:"credential"` // base64 encoded DCS connect password, leave empty if your DCS does not have one
 	AK         string `json:"ak"`         // base64 encoded AK
 	SK         string `json:"sk"`         // base64 encoded SK
+	Namespace  string `json:"namespace"`  // Kubernetes Namespace
+	Name       string `json:"name"`       // Dapr/Kubernetes resource name
 }
 
 func (s *Server) HandleHeathCheck(w http.ResponseWriter, r *http.Request) {
@@ -36,10 +44,10 @@ func (s *Server) HandleHelloWorld(w http.ResponseWriter, r *http.Request) {
 // Deploy App on Dapr
 func (s *Server) HandleAppCreate(w http.ResponseWriter, r *http.Request) {
 	log.Println("HandleAppCreate")
-	var req CreateRequest
+	var req AppCreateRequest
 	json.NewDecoder(r.Body).Decode(&req)
 	log.Println(req)
-	result, err := s.kubeClient.CreateAppDeploy(req.Deployment, &req.Connect)
+	result, err := s.kubeClient.CreateAppDeploy(&req)
 	if err != nil {
 		HandleInternalServerError(w, err)
 	} else {
@@ -51,14 +59,14 @@ func (s *Server) HandleAppCreate(w http.ResponseWriter, r *http.Request) {
 // Delete App on Dapr
 func (s *Server) HandleAppDelete(w http.ResponseWriter, r *http.Request) {
 	log.Println("HandleAppDelete")
-	var req DeleteRequest
+	var req AppDeleteRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		HandleInternalServerError(w, err)
 	}
 	log.Println(req)
 
-	result, err := s.kubeClient.DeleteAppDeploy(req.Namespace, req.Name)
+	result, err := s.kubeClient.DeleteAppDeploy(&req)
 	if err != nil {
 		HandleNotFound(w, err)
 	} else {
@@ -88,7 +96,13 @@ func (s *Server) HandleDCSConnect(w http.ResponseWriter, r *http.Request) {
 // Disconnect DCS from Dapr
 func (s *Server) HandleDCSDisconnect(w http.ResponseWriter, r *http.Request) {
 	log.Println("HandleDCSDisconnect")
-	result, err := s.kubeClient.DisconnectDCS()
+	var req DCSDisconnectRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		HandleInternalServerError(w, err)
+	}
+	log.Println(req)
+	result, err := s.kubeClient.DisconnectDCS(&req)
 	if err != nil {
 		HandleNotFound(w, err)
 	} else {
