@@ -37,7 +37,7 @@ spec:
     spec:
       containers:
         - name: node
-          image: swr.cn-north-4.myhuaweicloud.com/hwstaff_f00341949/node-demo:latest
+          image: www.example.com/image/address:latest
           ports:
             - containerPort: 3000
           imagePullPolicy: Always
